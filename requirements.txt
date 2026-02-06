@@ -1,0 +1,24 @@
+# Core dependencies
+torch>=2.0.0  # Install FIRST: pip install torch
+numpy>=1.20.0
+
+# Attention optimization (install SECOND, after torch)
+# Requires CUDA toolkit installed
+flash-attn>=2.8.0,<3.0.0  # Install: pip install flash-attn --no-build-isolation
+
+# Inference engine (install THIRD, after flash-attn)
+vllm>=0.15.0  # Install: pip install vllm --no-build-isolation
+
+# Optional dependencies for running examples
+# Install with: pip install -e ".[examples]"
+tqdm>=4.64.0
+# matplotlib>=3.5.0  # Uncomment if you need visualization
+
+# Optional development dependencies
+# Install with: pip install -e ".[dev]"
+# pytest>=7.0.0
+# pytest-cov>=4.0.0
+# black>=23.0.0
+# isort>=5.12.0
+# flake8>=6.0.0
+# mypy>=1.0.0
