@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>MathJax Test</title>
+  <script>
+  MathJax = {
+    tex: {
+      inlineMath: [['$', '$'], ['\\(', '\\)']],
+      displayMath: [['$$', '$$'], ['\\[', '\\]']],
+      macros: {
+        piT: "{\\color{#6442D3}{\\pi^{\\mathrm{T}}}}",
+        piS: "{\\color{#E69800}{\\pi^{\\text{S}}}}",
+        piTbase: "{\\color{#6442D3}{\\pi^{\\mathrm{T}}_{\\text{base}}}}",
+        piSbase: "{\\color{#E69800}{\\pi^{\\text{S}}_{\\text{base}}}}",
+        piTtheta: "{\\color{#6442D3}{\\pi^{\\mathrm{T}}_\\theta}}",
+        piStheta: "{\\color{#E69800}{\\pi^{\\text{S}}_\\theta}}",
+        bI: "\\mathbf{I}"
+      }
+    }
+  };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+</head>
+<body>
+  <h1>MathJax Macro Test</h1>
+  <p>Regular math: $\pi^*$</p>
+  <p>Teacher macro: $\piT$</p>
+  <p>Student macro: $\piS$</p>
+  <p>With subscript: $\piTtheta$</p>
+  <p>Bold I: $\bI$</p>
+</body>
+</html>

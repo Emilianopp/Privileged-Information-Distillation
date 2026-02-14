@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ page.title | default: site.title }}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css">
+  {% include mathjax.html %}
+  <style>
+    body {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+    header {
+      margin-bottom: 2rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid #e1e4e8;
+    }
+    header a {
+      text-decoration: none;
+    }
+    .site-title {
+      font-size: 1.5rem;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="{{ '/' | relative_url }}" class="site-title">{{ site.title }}</a>
+  </header>
+  
+  <main>
+    {{ content }}
+  </main>
+  
+  <footer style="margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #e1e4e8; color: #586069;">
+    <p>&copy; {{ 'now' | date: "%Y" }} {{ site.title }}</p>
+  </footer>
+</body>
+</html>
