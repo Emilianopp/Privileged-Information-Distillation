@@ -6,10 +6,11 @@ author: "Your Name"
 
 The purpose of this post is to be a quick introduction to some recent works on self-distillation and privileged information distillation, including [Shenfeld et al. (2026)](#ref-shenfeld2026), [Zhao et al. (2026)](#ref-zhao2026), [Hübotter et al. (2026)](#ref-hubotter2026), and [Penaloza et al. (2026)](#ref-penaloza2026). We hope to give some intuition on how these algorithms work, where they come from, as well as comment on when their assumptions are valid or invalid.
 
+
+The intended audience of this blog is for people that have a decent understanding of variational inference and reinforcement learning, as well as their relationships. For those unfamiliar, we recommend the following:
 <details markdown="1">
 <summary><strong>Background Reading</strong> (click to expand)</summary>
 
-The intended audience of this blog is for people that have a decent understanding of variational inference and reinforcement learning, as well as their relationships. For those unfamiliar, we recommend the following:
 - [Control as Inference](https://jasonppy.github.io/deeprl/deeprl-12-control-as-inference/) for an introduction to the RL-as-inference framework (or see [Levine's tutorial paper](https://arxiv.org/abs/1805.00909))
 - [Variational Inference: A Review for Statisticians](https://arxiv.org/abs/1601.00670) for a comprehensive overview of variational inference
 - [The RLHF Book](https://rlhfbook.com/) for RL + LLMs
@@ -23,90 +24,119 @@ We work in a single-turn setting where $x$ denotes the prompt, $z$ the chain-of-
 
 </details>
 
+## Reinforcement Learning as Inference
+
 The goal of RL is to maximize reward
 
 $$
-\max_\pi \mathbb{E}_{y \sim \pi(\cdot \mid x)}\left[R(y, x)\right]
+\piStar = \arg\max_\pi \mathbb{E}_{y \sim \pi(\cdot \mid x)}\left[R(y, x)\right]
 $$
 
-with the goal of obtaining a target policy $\pi^*$. A slightly different perspective treats RL as an inference problem, wherein we define the target policy as a distribution over outputs:
+to obtain a target policy $\piStar$. A slightly different perspective treats RL as an inference problem, wherein we define the target policy as a distribution over outputs:
 
 $$
-\pi^*(y \mid x) = \frac{1}{Z(x)}\,\pi_{\mathrm{ref}}(y \mid x)\exp\left(\frac{R(y, x)}{\tau}\right)
+\piStarfull = \frac{1}{Z(x)}\,\pi_{\mathrm{ref}}(y \mid x)\exp\left(\frac{R(y, x)}{\tau}\right)
 $$
 
-Here, the partition function $Z$ makes direct inference intractable, making us rely on approximations. To do this, we can parameterize a policy $\piSphi$ and approximate the target policy using the reverse-KL:
+Since the partition function $Z$ makes direct inference intractable, we instead parameterize an approximate policy $\piSphi$ and minimize the reverse-KL divergence to $\piStar$. Where we must use reverse-KL as we can only sample from $\piSphi$, not from $\piStar$:
 
 $$
-D_{\text{kl}}(\piSphi \;\|\; \pi^*) = \mathbb{E}_{y\sim\piSphi}\left[\log\frac{\piSphi(y \mid x)}{\pi^*(y \mid x)}\right]
+\underbrace{D_{\text{kl}}(\piSphi \;\|\; \piStar)}_{\text{Reverse-KL}} = \mathbb{E}_{y\sim\piSphi}\left[\log\frac{\piSphi(y \mid x)}{\piStarfull}\right]
 $$
 
-If we write the target policy in the usual RL-as-inference form
 
-$$
-\pi^*(y \mid x) = \frac{1}{Z(x)}\,\pi_{\mathrm{ref}}(y \mid x)\exp\left(\frac{R(y, x)}{\tau}\right),
-$$
+<details markdown="1">
+<summary><strong>Full Derivation</strong> (click to expand)</summary>
 
-then the reverse-KL decomposes as
+Starting from the reverse-KL and expanding the definition of $\piStar$:
 
 $$
 \begin{aligned}
-D_{\text{kl}}(\piSphi \;\|\; \pi^*) &= \mathbb{E}_{y\sim\piSphi}\big[\log\piSphi(y \mid x)-\log\pi^*(y \mid x)\big] \\
-&= \mathrm{KL}(\piSphi\;\|\;\pi_{\mathrm{ref}}) - \frac{1}{\tau}\,\mathbb{E}_{y\sim\piSphi}[R(y, x)] + \log Z(x).
+D_{\text{kl}}(\piSphi \;\|\; \piStar)
+&= \mathbb{E}_{y\sim\piSphi}\left[\log\frac{\piSphi(y \mid x)}{\piStarfull}\right] \\
+&= \mathbb{E}_{y\sim\piSphi}\left[\log\frac{\piSphi(y \mid x)}{\frac{1}{Z(x)}\,\pi_{\mathrm{ref}}(y \mid x)\exp\!\left(\frac{R(y,x)}{\beta}\right)}\right] \\
+&= \mathbb{E}_{y\sim\piSphi}\left[\log\piSphi(y \mid x) - \log\pi_{\mathrm{ref}}(y \mid x) - \frac{R(y,x)}{\beta} + \log Z(x)\right] \\
+&= D_{\text{kl}}(\piSphi\;\|\;\pi_{\mathrm{ref}}) - \frac{1}{\beta}\,\mathbb{E}_{y\sim\piSphi}\left[R(y, x)\right] + \log Z(x)
 \end{aligned}
 $$
 
-Thus minimizing the reverse-KL is equivalent (up to constants) to maximizing expected reward while penalizing deviation from a reference policy.
+Since $\log Z(x)$ is constant w.r.t. $\phi$, minimizing the reverse-KL is equivalent to:
 
-This is equivalent to the reward-maximization term with an added KL penalty. But this objective also has a failure mode: it requires us to sample successful trajectories in order to reinforce them. For instance, consider a hard task where the model always yields zero success, as shown in the figure below:
+$$
+\max_\phi\; \mathbb{E}_{y\sim\piSphi}\left[R(y, x)\right] - \beta \, D_{\text{kl}}(\piSphi\;\|\;\pi_{\mathrm{ref}})
+$$
+$$
+\max_\phi\; \mathbb{E}_{y\sim\piSphi}\left[R(y, x)\right] - \beta \, D_{\text{kl}}(\piSphi\;\|\;\pi_{\mathrm{ref}})
+$$
+
+
+
+</details>
+Note that when $\beta = 0$ we recover the original reward-maximization objective. Otherwise, the KL term acts as a regularizer, encouraging the policy to stay close to the reference.
+
+
+### Failures of RL
+
+While this objective has proven widely successful, it relies on the policy $\piSphi$ being able to sample high-reward outputs. When the policy cannot produce any successful trajectories, there is no positive signal to reinforce.
+
+For instance, consider the following setting:
 
 ![Student-only policy failing example](/figures/start.png)
-*Figure 1: Student-only agent fails to sample correct trajectories (illustrative).*
+*Figure 1: Failure case of RL, here we visualize $\piSphi$ and $\piStar$ where $\piSphi$ has no support over successful trajectories.*
 
-In this case the model cannot sample any correct trajectories and cannot bootstrap itself onto the optimal policy $\pi^*$. While theoretically an LM could eventually sample a correct trajectory, since it has full support over the sampling distribution (i.e., non-zero probability over every token at each step), this is infeasible in practice.
+Notice that $\piSphi$ does not have support over correct trajectories, so applying RL in this setting would lead to the model only ever learning what *not* to do, never what *to* do. Without any high-reward samples to reinforce, it cannot bootstrap itself toward $\piStar$. While an LM technically has full support over the token space, making it theoretically possible to eventually sample a correct trajectory, this is infeasible in practice.
 
 
-One exciting property of LMs, unlike most other ML systems, is that we can freely contextualize them on additional information. This property has many benefits — notably, even a small amount of *Privileged Information* (PI) can enable models to sample tasks they could not previously. See the figure below, where $\piTthetafull$ denotes the teacher contextualized on privileged information $\mathbf{I}$.
+### Shaping a LM distribution by Conditioning
+
+Although typical RL fails in these settings, LMs provide a useful property that can alleviate this problem. Unlike other ML systems, LMs can be freely conditioned on additional information. Notably, even a small amount of *Privileged Information* (PI) can enable models to sample tasks they previously could not. The figure below shows $\piTthetafull$, the same model now conditioned on privileged information $\mathbf{I}$, which we refer to as the *teacher*.
 
 ![With teacher example](/figures/start-w-teacher.png)
 *Figure 2: Teacher policy contextualized on privileged information can now sample successful trajectories.*
 
 After contextualizing on $\mathbf{I}$, we see that the model can now sample successful traces. The only problem now is that we won't have access to $\mathbf{I}$ at test time, since it is typically *task-specific*. So we need to find a way to transfer the information embedded within it to $\piS$, as this is the only policy we have access to at test time.
 
-The remainder of this blog post focuses on different ways of doing this.
+The remainder of this post explores different approaches to achieving this:
 
-1. SFT
-2. Self-Distillation
-3. Variational EM
-4. Privileged Information Distillation
-5. Cool opportunities
-
-
-### SFT
-
-By far the simplest and most popular way of transferring this knowledge is through Supervised Fine-Tuning (SFT). This is equivalent to fitting forward-KL between the teacher policy $\piT$ and the student $\piS$.
+1. [SFT](#sft) — supervised fine-tuning on teacher trajectories
+2. [Self-Distillation](#self-distillation-via-reverse-kl) — matching the student to the teacher via reverse KL
+3. [Reward-Tilted Self-Distillation](#reward-tilted-self-distillation) — incorporating reward into the distillation target
+4. [Variational EM](#variational-em) — alternating between fitting the teacher and distilling to the student
+5. [$\pi$-Distill](#pi-distill) — joint teacher-student training with shared parameters
 
 
+## Supervised Fine-Tuning 
 
-*Figure: Supervised Fine-Tuning (SFT) demonstration.*
+By far the simplest and most popular way of transferring this knowledge is through Supervised Fine-Tuning (SFT). This is equivalent to fitting forward-KL between the teacher policy $\piT$ and the student $\piS$. 
+
+
+
 
 $$D_{\text{kl}}(\piT \;\|\; \piS) = \mathbb{E}_{y\sim\piT}\left[\log\frac{\piT(y \mid x)}{\piS(y \mid x)}\right]$$
 
+Since $\piT$ is fixed, minimizing the forward-KL reduces to maximizing the expected log-likelihood under the student:
+
+$$
+\max_\phi\; \mathbb{E}_{y\sim\piT}\left[\log \piSphi(y \mid x)\right]
+$$
+
+Typically $\piT$ is a larger model, but in this specific case it can be the same starting model with added context i.e. $\piTthetafull$. 
 
 While this approach is powerful, it is inherently limited by the properties of forward-KL, namely that it is *mode covering*. To see this behavior, see the image below:
 ![SFT illustration](/figures/sft-gif.gif)
+*Figure: Supervised Fine-Tuning (SFT) demonstration.*
 
-While this can be desirable, it can lead to the model outputting samples that are not quite like the teacher model's outputs, where $\piS$ focuses on expanding its support to match that of $\piT$, rather than accurately approximating it.
+This can often lead to the model outputting samples that are not likely under the teacher model. This can happen as forward-KL makes $\piS$ focus on expanding its support to match that of $\piT$, rather than accurately approximating it.
 
-### Self-Distillation via Reverse KL
+## Self-Distillation via Reverse KL
 
 An easy fix to the mode covering behavior of forward-KL is to instead optimize reverse-KL, which is *mode seeking*. When using $\piTthetafull$ as the teacher, this is referred to as self-distillation, which optimizes the following objective:
 
 $$
-D_{\text{kl}}(\piStheta \;\|\; \piTtheta) = \mathbb{E}_{y\sim\piStheta}\left[\log\frac{\piSthetafull}{\piTthetafull}\right].
+D_{\text{kl}}(\piSphi \;\|\; \piTtheta) = \mathbb{E}_{y\sim\piSphi}\left[\log\frac{\piSphifull}{\piTthetafull}\right].
 $$
 
-Minimizing this encourages the student to place mass where it already samples, but guided by the teacher's density.
+Minimizing this encourages the student to place mass where it already samples, but guided by the teacher's density. We note that typically most works allow $\phi$ to equal $\theta$ as in [Penaloza et al. (2026)](#ref-penaloza2026), be an exponential moving average as in [Hübotter et al. (2026)](#ref-hubotter2026), [Shenfeld et al. (2026)](#ref-shenfeld2026), and [Zhao et al. (2026)](#ref-zhao2026), or simply be the base model. 
 
 ![Self-distillation illustration](/figures/reverse-kl.gif)
 
@@ -115,61 +145,63 @@ This idea comes from [Agarwal et al. (2023)](#ref-onpoldistill), which shows tha
 But as seen in the figure above, this can lead to some suboptimal behavior, where the policy fits a suboptimal mode of the teacher.
 
 
-### Reward-Tilted Self-Distillation
+## Reward-Tilted Self-Distillation
 
-The main problem with pure self-distillation is its bias towards easier-to-fit modes, which may inherently be suboptimal. This comes from $\piTthetafull$ being the target distribution. A simple way to alleviate this is to define our target distribution $\pi^*$ as a reward-tilted variant of $\piTthetafull$:
+The main problem with pure self-distillation is its bias towards easier-to-fit modes, which may inherently be suboptimal. This comes from $\piTthetafull$ being the target distribution. A simple way to alleviate this is to define our target distribution $\piStar$ as a reward-tilted variant of $\piTthetafull$:
 
 $$
-\pi^*(y \mid x, \mathbf{I}) \propto \piTthetafull\exp\left(\frac{R(y, x)}{\tau}\right).
+\piStarfulli \propto \piTthetafull\exp\left(\frac{R(y, x)}{\tau}\right).
 $$
 
 Assuming $\theta$ is fixed with respect to $\piT$, we can optimize the reverse-KL between the student and this tilted target. This yields the following objective:
 
 $$
-\max_\theta \; \mathbb{E}_{y\sim\piSthetafull}\left[R(y, x)\right] - \tau \, D_{\text{kl}}\big(\piSthetafull \;\|\; \text{sg}[\piTthetafull]\big)
+\max_\phi \; \mathbb{E}_{y\sim\piSphifull}\left[R(y, x)\right] - \tau \, D_{\text{kl}}\big(\piSphifull \;\|\; \piTthetafull\big)
 $$
 
-where $\text{sg}[\cdot]$ denotes stop-gradient. This objective explicitly rewards high-reward outputs while still matching the teacher's structure.
+ This objective explicitly rewards high-reward outputs while still matching the teacher's structure.
 
 <details>
 <summary><strong>Derivation</strong> (click to expand)</summary>
 
 $$
 \begin{aligned}
-D_{\text{kl}}(\piS \;\|\; \pi^*) &= \mathbb{E}_{y\sim\piS}\left[\log\frac{\piS(y \mid x)}{\pi^*(y \mid x, \mathbf{I})}\right] \\
-&= \mathbb{E}_{y\sim\piS}\left[\log\frac{\piS(y \mid x)}{\frac{1}{\tilde{Z}(x)}\piT(y \mid x, \mathbf{I})\exp\left(\frac{R(y, x)}{\tau}\right)}\right] \\
-&= \mathbb{E}_{y\sim\piS}\left[\log\piS(y \mid x) - \log\piT(y \mid x, \mathbf{I}) - \frac{R(y, x)}{\tau} + \log \tilde{Z}(x)\right] \\
-&= \mathbb{E}_{y\sim\piS}\left[\log\frac{\piS(y \mid x)}{\piT(y \mid x, \mathbf{I})} - \frac{R(y, x)}{\tau}\right] + \log \tilde{Z}(x) \\
-&= D_{\text{kl}}\big(\piS(y \mid x) \;\|\; \piT(y \mid x, \mathbf{I})\big) - \frac{1}{\tau}\mathbb{E}_{y\sim\piS}\left[R(y, x)\right] + \log \tilde{Z}(x).
+D_{\text{kl}}(\piSphi \;\|\; \piStar) &= \mathbb{E}_{y\sim\piSphi}\left[\log\frac{\piSphifull}{\piStarfulli}\right] \\
+&= \mathbb{E}_{y\sim\piSphi}\left[\log\frac{\piSphifull}{\frac{1}{\tilde{Z}(x)}\piTthetafull\exp\left(\frac{R(y, x)}{\tau}\right)}\right] \\
+&= \mathbb{E}_{y\sim\piSphi}\left[\log\piSphifull - \log\piTthetafull - \frac{R(y, x)}{\tau} + \log \tilde{Z}(x)\right] \\
+&= \mathbb{E}_{y\sim\piSphi}\left[\log\frac{\piSphifull}{\piTthetafull} - \frac{R(y, x)}{\tau}\right] + \log \tilde{Z}(x) \\
+&= D_{\text{kl}}\big(\piSphi \;\|\; \piTthetafull\big) - \frac{1}{\tau}\mathbb{E}_{y\sim\piSphi}\left[R(y, x)\right] + \log \tilde{Z}(x).
 \end{aligned}
 $$
 
-Since $\log \tilde{Z}(x)$ is constant with respect to $\piS$, minimizing this KL is equivalent to maximizing:
+Since $\log \tilde{Z}(x)$ is constant with respect to $\piSphi$, minimizing this KL is equivalent to maximizing:
 
 $$
-\max_\theta \; \mathbb{E}_{y\sim\piSthetafull}\left[R(y, x)\right] - \tau \, D_{\text{kl}}\big(\piSthetafull \;\|\; \piTthetafull\big).
+\max_\phi \; \mathbb{E}_{y\sim\piSphifull}\left[R(y, x)\right] - \tau \, D_{\text{kl}}\big(\piSphifull \;\|\; \piTthetafull\big).
 $$
 
 </details>
 
 ![Reward-tilted self-distillation illustration](/figures/RKLR.gif)
 
-Introducing this reward bias should enable us to effectively fit higher reward modes.
+Introducing this reward bias should enable us to effectively fit higher reward modes. Also, notice how this objective is the same as the one outlined above to RL-as-inference, simply with a different prior distribution. 
+
+While this objective is powerful, it relies on the teacher already being a good approximation of $\piStar$, which can be unrealistic in many settings. 
 
 
 
 
-### Variational EM
-One assumption that both self-distillation variants rely on is that the teacher model $\piT$ has support over high-reward regions. While this assumption is likely valid in many settings, it may be severely limited in cases where even when conditioned on $\mathbf{I}$, the model still does not have coverage over high-reward regions.
+## Variational EM
+One assumption that self-distillation relies on is that  the teacher model $\piT$ has support over high-reward regions,  i.e., $\piTtheta \approx \piStar$. While this assumption is likely valid in many settings, it may be severely limited in cases where even when conditioned on $\mathbf{I}$, the model still does not have coverage over high-reward regions.
 
 
 
-<!-- figure -->
+![Teacher with limited coverage](/figures/teacher-bad-2.png)
 
 In this case, regardless of which algorithm we use, we are limited by the abilities of the teacher.
 
-
-An easy solution is that since $\piT$ does have some coverage over successful trajectories, we can leverage it to approximate the target policy. In this case though, rather than directly trying to approximate $\piT$, we first make it approximate $\pi^*$ itself. Once $\piT$ resembles $\pi^*$, we can then use it as a target for $\piS$. Plainly put: we train the teacher to approximate the target, and once the teacher looks like the target, we fit the student onto the teacher. The figure below visualizes this procedure:
+<video src="/figures/em-gif.mov" autoplay loop muted playsinline></video>
+An easy solution is that since $\piT$ does have some coverage over successful trajectories, we can leverage it to approximate the target policy. In this case though, rather than directly trying to approximate $\piT$, we first make it approximate $\piStar$ itself. Once $\piT$ resembles $\piStar$, we can then use it as a target for $\piS$. Plainly put: we train the teacher to approximate the target, and once the teacher looks like the target, we fit the student onto the teacher. The figure below visualizes this procedure:
 
 
 
@@ -201,7 +233,10 @@ When $\alpha = 1$, only the teacher is being trained. This is similar to other w
 
 For visualizing $\pi$-Distill, we add an axis, where now the x-axis represents the KL between the displayed models and the base policy $\pi_{\text{base}}$ while the y-axis represents the reward for the trajectories. This allows us to visualize how things change as we vary the portions we optimize.
 
-<!-- insert teacher gif -->
+
+
+
+
 
 For instance, as we optimize $\piS$ we see the model is incentivized to drift away from the base model, where adding the KL term prevents it from drifting too far. By sharing parameters though, knowledge can transfer between $\piStheta$ and $\piTtheta$.
 
