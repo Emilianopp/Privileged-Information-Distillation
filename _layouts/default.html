@@ -11,6 +11,8 @@
       max-width: 800px;
       margin: 0 auto;
       padding: 2rem;
+      background-color: #ffffff;
+      color: #24292e;
     }
     header {
       margin-bottom: 2rem;
@@ -19,10 +21,55 @@
     }
     header a {
       text-decoration: none;
+      color: #24292e;
     }
     .site-title {
       font-size: 1.5rem;
       font-weight: bold;
+      color: #24292e;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      color: #24292e;
+    }
+    details {
+      background: #ffffff !important;
+      border: 1px solid #d0d7de;
+      border-radius: 8px;
+      padding: 0;
+      margin: 1rem 0;
+    }
+    details summary {
+      cursor: pointer;
+      color: #24292e !important;
+      font-weight: bold;
+      background: #ffffff !important;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    details summary strong {
+      color: #24292e !important;
+    }
+    details summary::before {
+      content: "▶";
+      font-size: 0.7em;
+      transition: transform 0.2s;
+    }
+    details[open] summary::before {
+      transform: rotate(90deg);
+    }
+    details summary::-webkit-details-marker {
+      display: none;
+    }
+    details[open] summary {
+      border-bottom: 1px solid #d0d7de;
+      border-radius: 8px 8px 0 0;
+    }
+    details > *:not(summary) {
+      padding: 0 1rem;
     }
   </style>
 </head>

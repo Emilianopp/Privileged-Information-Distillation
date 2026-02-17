@@ -4,12 +4,12 @@ date: 2026-02-04
 author: "Your Name"
 ---
 
-The purpose of this post is to be a quick introduction to some recent works on self-distillation and privileged information distillation, including [Shenfeld et al. (2026)](#ref-shenfeld2026), [Zhao et al. (2026)](#ref-zhao2026), [Hübotter et al. (2026)](#ref-hubotter2026), and [Penaloza et al. (2026)](#ref-penaloza2026). We hope to give some intuition on how these algorithms work, where they come from, as well as comment on when their assumptions are valid or invalid.
+This post provides an introductory overview of recent works on self-distillation and privileged information distillation, including [Shenfeld et al. (2026)](#ref-shenfeld2026), [Zhao et al. (2026)](#ref-zhao2026), [Hübotter et al. (2026)](#ref-hubotter2026), and [Penaloza et al. (2026)](#ref-penaloza2026). We aim to build intuition for how these algorithms work, where they come from, and when their assumptions hold. Throughout, we favour gaining intuition over providing a complete nuanced view, using simplified 2D/3D visualizations of these algorithms to describe the core ideas.
 
 
-The intended audience of this blog is for people that have a decent understanding of variational inference and reinforcement learning, as well as their relationships. For those unfamiliar, we recommend the following:
+Our work spans the intersection of variational inference and reinforcement learning applied to LMs. We hope this blog is approachable to a broad audience assuming only a small background in reinforcement learning. Regardless, we provide some supplemental reading for those interested.
 <details markdown="1">
-<summary><strong>Background Reading</strong> (click to expand)</summary>
+<summary><strong>Supplemental Reading</strong> (click to expand)</summary>
 
 - [Control as Inference](https://jasonppy.github.io/deeprl/deeprl-12-control-as-inference/) for an introduction to the RL-as-inference framework (or see [Levine's tutorial paper](https://arxiv.org/abs/1805.00909))
 - [Variational Inference: A Review for Statisticians](https://arxiv.org/abs/1601.00670) for a comprehensive overview of variational inference
@@ -75,13 +75,27 @@ $$
 Note that when $\beta = 0$ we recover the original reward-maximization objective. Otherwise, the KL term acts as a regularizer, encouraging the policy to stay close to the reference.
 
 
-### Failures of RL
+To illustrate this, consider the figure below, where $\beta =0$. Here the model can quickly fit $\piStar$, but has its entropy (bell curveness) collapsed onto a high-reward mode. 
+<video src="/figures/rl-collapse.mov" autoplay loop muted playsinline></video>
+
+
+
+When $\beta>0$, we can expect the policy do behave similarly, but instead drifts less from the reference policy $\pi_{\text{ref}}$ while also preserving more entropy (bell curve shape). 
+
+<video src="/figures/rl-kl.mov" autoplay loop muted playsinline></video>
+
+Both of these properties can be useful in different contexts, for instance, when the entropy of the model has collapsed it can reliably sample from a high reward mode, but in the other case, it is able to preserve some reward over even higher-reward regions which can be useful property we'll discuss later. Moreover, the tradeoff becomes more nuanced when distributions are multi-model (multiple peaks) which is the setting we discuss in the remainder of the blog. 
+
+Regardless, the choice of $\beta$ is largely task-specific and often decided via hyperparameter tuning ([Shah et al., 2026](#ref-shah2026)). 
+
+
+## Failures of RL
 
 While this objective has proven widely successful, it relies on the policy $\piSphi$ being able to sample high-reward outputs. When the policy cannot produce any successful trajectories, there is no positive signal to reinforce.
 
 For instance, consider the following setting:
 
-![Student-only policy failing example](/figures/start.png)
+![Student-only policy failing example](/figures/rl-zero.png)
 *Figure 1: Failure case of RL, here we visualize $\piSphi$ and $\piStar$ where $\piSphi$ has no support over successful trajectories.*
 
 Notice that $\piSphi$ does not have support over correct trajectories, so applying RL in this setting would lead to the model only ever learning what *not* to do, never what *to* do. Without any high-reward samples to reinforce, it cannot bootstrap itself toward $\piStar$. While an LM technically has full support over the token space, making it theoretically possible to eventually sample a correct trajectory, this is infeasible in practice.
@@ -91,7 +105,7 @@ Notice that $\piSphi$ does not have support over correct trajectories, so applyi
 
 Although typical RL fails in these settings, LMs provide a useful property that can alleviate this problem. Unlike other ML systems, LMs can be freely conditioned on additional information. Notably, even a small amount of *Privileged Information* (PI) can enable models to sample tasks they previously could not. The figure below shows $\piTthetafull$, the same model now conditioned on privileged information $\mathbf{I}$, which we refer to as the *teacher*.
 
-![With teacher example](/figures/start-w-teacher.png)
+![With teacher example](/figures/teacher-self.png)
 *Figure 2: Teacher policy contextualized on privileged information can now sample successful trajectories.*
 
 After contextualizing on $\mathbf{I}$, we see that the model can now sample successful traces. The only problem now is that we won't have access to $\mathbf{I}$ at test time, since it is typically *task-specific*. So we need to find a way to transfer the information embedded within it to $\piS$, as this is the only policy we have access to at test time.
@@ -123,8 +137,9 @@ $$
 Typically $\piT$ is a larger model, but in this specific case it can be the same starting model with added context i.e. $\piTthetafull$. 
 
 While this approach is powerful, it is inherently limited by the properties of forward-KL, namely that it is *mode covering*. To see this behavior, see the image below:
-![SFT illustration](/figures/sft-gif.gif)
-*Figure: Supervised Fine-Tuning (SFT) demonstration.*
+
+<video src="/figures/sft.mov" autoplay loop muted playsinline></video>
+
 
 This can often lead to the model outputting samples that are not likely under the teacher model. This can happen as forward-KL makes $\piS$ focus on expanding its support to match that of $\piT$, rather than accurately approximating it.
 
@@ -138,7 +153,7 @@ $$
 
 Minimizing this encourages the student to place mass where it already samples, but guided by the teacher's density. We note that typically most works allow $\phi$ to equal $\theta$ as in [Penaloza et al. (2026)](#ref-penaloza2026), be an exponential moving average as in [Hübotter et al. (2026)](#ref-hubotter2026), [Shenfeld et al. (2026)](#ref-shenfeld2026), and [Zhao et al. (2026)](#ref-zhao2026), or simply be the base model. 
 
-![Self-distillation illustration](/figures/reverse-kl.gif)
+<video src="/figures/rKL.mov" autoplay loop muted playsinline></video>
 
 This idea comes from [Agarwal et al. (2023)](#ref-onpoldistill), which shows that distilling on-policy can lead to significantly better performance and generalization on a variety of tasks when compared to SFT.
 
@@ -182,7 +197,8 @@ $$
 
 </details>
 
-![Reward-tilted self-distillation illustration](/figures/RKLR.gif)
+<video src="/figures/rklr.mov" autoplay loop muted playsinline></video>
+
 
 Introducing this reward bias should enable us to effectively fit higher reward modes. Also, notice how this objective is the same as the one outlined above to RL-as-inference, simply with a different prior distribution. 
 
@@ -196,11 +212,11 @@ One assumption that self-distillation relies on is that  the teacher model $\piT
 
 
 
-![Teacher with limited coverage](/figures/teacher-bad-2.png)
+![Teacher with limited coverage](/figures/bad-teacher.png)
 
 In this case, regardless of which algorithm we use, we are limited by the abilities of the teacher.
+<video src="/figures/em3.mov" autoplay loop muted playsinline></video>
 
-<video src="/figures/em-gif.mov" autoplay loop muted playsinline></video>
 An easy solution is that since $\piT$ does have some coverage over successful trajectories, we can leverage it to approximate the target policy. In this case though, rather than directly trying to approximate $\piT$, we first make it approximate $\piStar$ itself. Once $\piT$ resembles $\piStar$, we can then use it as a target for $\piS$. Plainly put: we train the teacher to approximate the target, and once the teacher looks like the target, we fit the student onto the teacher. The figure below visualizes this procedure:
 
 
@@ -280,6 +296,9 @@ Finally, recent work suggests that fitting policies to data that is more off-pol
 ---
 
 ## References
+
+<a id="ref-shah2026"></a>
+**[Shah et al., 2026]** Shah, V., Obando-Ceron, J., Jain, V., Bartoldson, B., Kailkhura, B., Mittal, S., Berseth, G., Castro, P. S., Bengio, Y., Malkin, N., Jain, M., Venkatraman, S., & Courville, A. (2026). *A Comedy of Estimators: On KL Regularization in RL Training of LLMs*. [arXiv:2512.21852](https://arxiv.org/abs/2512.21852)
 
 <a id="ref-shenfeld2026"></a>
 **[Shenfeld et al., 2026]** Shenfeld, I., Damani, M., Hübotter, J., & Agrawal, P. (2026). *Self-Distillation Enables Continual Learning*. [arXiv:2601.19897](https://arxiv.org/abs/2601.19897)
