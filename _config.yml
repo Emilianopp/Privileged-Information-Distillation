@@ -1,8 +1,24 @@
 # Site settings
-title: "Privileged Information Distillation"
-description: "A research blog exploring privileged information distillation methods"
+title: "Understanding Self-Distillation and Privileged Information Distillation"
+description: "An introductory guide to self-distillation and privileged information distillation for language models. Covers RL-as-inference, forward-KL (SFT), reverse-KL self-distillation, reward-tilted distillation, variational EM, and pi-Distill with interactive visualizations."
 baseurl: "" # the subpath of your site, e.g. /blog
 url: "" # the base hostname & protocol for your site
+
+# SEO
+lang: en
+keywords:
+  - self-distillation
+  - privileged information distillation
+  - knowledge distillation
+  - language models
+  - reinforcement learning
+  - variational inference
+  - KL divergence
+  - pi-Distill
+  - reward-tilted distillation
+  - on-policy distillation
+  - RLHF
+  - LLM training
 
 # Markdown settings
 markdown: kramdown
