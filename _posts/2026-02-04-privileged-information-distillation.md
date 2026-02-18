@@ -8,6 +8,8 @@ authors:
     url: "https://vattikondadheeraj.github.io/"
   - name: "Siddarth Venkatraman"
     url: "https://hyperpotatoneo.github.io/"
+  - name: "Massimo Caccia"
+    url: "https://optimass.github.io/"
 description: "An introductory guide to self-distillation and privileged information distillation for language models. Covers RL-as-inference, forward-KL (SFT), reverse-KL self-distillation, reward-tilted distillation, variational EM, and pi-Distill with interactive visualizations."
 permalink: /
 citation: |
@@ -156,19 +158,23 @@ For instance, consider the following setting:
 ![Student-only policy failing example]({{ site.baseurl }}/figures/rl-zero.png)
 
 
-Notice that $\piSphi$ does not have support over correct trajectories, so applying RL in this setting would lead to the model only ever learning what *not* to do, never what *to* do. Without any high-reward samples to reinforce, it cannot bootstrap itself toward $\piStar$. While an LM technically has full support over the token space, making it theoretically possible to eventually sample a correct trajectory, this is infeasible in practice.
+Notice that $\piSphi$ does not have support over correct trajectories, so applying RL in this setting would lead to the model only ever learning what *not* to do, never what *to* do. Without any high-reward samples to reinforce, it cannot bootstrap itself toward $\piStar$. While an LM technically has full support over the token space, making it theoretically possible to eventually sample a correct trajectory, this is practically infeasible.
 
 These settings are common in practice. LMs often struggle to sample correct solutions to long-horizon agentic tasks and/or hard reasoning problems, so alleviating this could greatly improve performance.
 
 
 ## Shaping a LM distribution by Conditioning
 
-Although typical RL fails in these settings, LMs provide a useful property that can alleviate this problem. Unlike other ML systems, LMs can be freely conditioned on additional information. Notably, even a small amount of *privileged information* can enable models to succeed at tasks they previously could not. The figure below shows $\piTthetafull$, the same model now conditioned on privileged information $\mathbf{I}$, which we refer to as the *teacher*. Although initially both are the same model, this changes as we train them, so we use different parameters to denote the teacher $\theta$ and the student $\phi$.  
+Although typical RL fails in these settings, LMs provide a useful property that can alleviate this problem. Unlike other ML systems, LMs can be freely conditioned on additional information. Notably, even a small amount of *privileged information* can enable models to succeed at tasks they previously could not. The figure below shows $\piTthetafull$, the same model now conditioned on privileged information $\mathbf{I}$, which we refer to as the *teacher*. Both start as the same model, but since training will change them differently, we use $\theta$ for the teacher and $\phi$ for the student.  
 
 ![With teacher example]({{ site.baseurl }}/figures/start-w-teacher.png)
 
 
-After contextualizing on $\mathbf{I}$, we see that the model can now sample successful traces. The only problem now is that we won't have access to $\mathbf{I}$ at test time, since it is typically *task-specific*. So we need to find a way to transfer the information embedded within it to $\piSphi$, as this is the only policy we have access to at test time.
+After contextualizing on $\mathbf{I}$, we see that the model can now sample successful traces. The only problem now is that we won't have access to $\mathbf{I}$ at test time, since it is typically *task-specific*. So we need to find a way to transfer the information embedded within it to $\piSphi$, as this is the only deployable policy.
+
+In the above example and for the remainder of the post, we assume that both $\piSphi$ and $\piTtheta$ share input prompts $x$ and outputs $y$ with the only difference between them being that $\piSphi$ is additionally contextualized with $\mathbf{I}$. We further clarify that this is the case regardless of which policy is used for sampling. Allowing for this to happen in practice is fairly straight-forward, with the below diagram visualizing the how this is done:
+
+![Data illustration]({{ site.baseurl }}/figures/data-illustration.png)
 
 The remainder of this post explores different approaches to achieving this. Specifically, in settings where we assume $\piStheta$ and $\piTtheta$ are derived from the *same* base model.
 
@@ -181,7 +187,7 @@ The remainder of this post explores different approaches to achieving this. Spec
 
 ## Supervised Fine-Tuning 
 
-By far the simplest and most popular way of transferring this knowledge is through Supervised Fine-Tuning (SFT). This is equivalent to fitting forward-KL between the teacher policy $\piTtheta$ and the student $\piStheta$.
+By far the simplest and most popular way of transferring knowledge found in privileged information is through Supervised Fine-Tuning (SFT). This is equivalent to fitting forward-KL between the teacher policy $\piTtheta$ and the student $\piStheta$.
 
 
 
@@ -290,7 +296,7 @@ $$
 J_{\text{Teacher}}(\theta) = \underbrace{\mathbb{E}_{y \sim \piTthetafull}\left[R(y, x)\right] }_{\text{Make teacher better}}- \beta \underbrace{\, D_{\text{kl}}\big(\piTthetafull \;\|\; \text{sg}[\piSphifull]\big)}_{\text{Make learning from teacher easier}}
 $$
 
-Here $\text{sg}[\cdot]$ denotes stop-gradient, meaning the student is held fixed when updating the teacher. This encourages the teacher to maximize reward while not drifting too far from the student. Effectively, one part of the objective aims to improve the teacher while the other aims to make the samples from the teacher look more similar to those of the student. Making the teacher act like the student may seem counter-intuitive, but the KL term keeps the teacher's samples close to the student's distribution, meaning they stay more *on-policy* ([Sutton & Barto, 2018](#ref-sutton2018)). This makes the teacher an easier target for the student to distill from later.
+Here $\text{sg}[\cdot]$ denotes stop-gradient, meaning the student is held fixed when updating the teacher. This objective encourages the teacher to maximize reward while not drifting too far from the student. Effectively, one part of the objective improves the teacher while the other prevents it from drifting too far from the student. Why does this matter? The student will eventually need to learn from the teacher's samples. If those samples look nothing like what the student would generate on its own, the learning signal becomes noisy and hard to use. Keeping the teacher close ensures its samples stay on-policy for the student ([Sutton & Barto, 2018](#ref-sutton2018)) while also having higher reward. These properties encapsulate what makes up good training data, samples that the student can realistically learn from, but that are better than what it currently produces.
 
 <details>
 <summary><strong>Derivation of Teacher Objective</strong> (click to expand)</summary>
