@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://emilianopp.github.io/Privileged-Information-Distillation/sitemap.xml
