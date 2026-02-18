@@ -115,13 +115,13 @@ When $\beta = 0$ we recover the original reward-maximization objective. Otherwis
 
 
 To illustrate this, consider the figure below where $\beta = 0$. The model quickly fits $\piStar$, but its entropy collapses onto a single high-reward mode.
-<video src="/figures/rl-collapse.mov" autoplay loop muted playsinline></video>
+<video src="{{ site.baseurl }}/figures/rl-collapse.mov" autoplay loop muted playsinline></video>
 
 
 
 When $\beta > 0$, the policy behaves similarly but drifts less from the reference policy $\pi_{\text{ref}}$ while preserving more entropy.
 
-<video src="/figures/rl-kl.mov" autoplay loop muted playsinline></video>
+<video src="{{ site.baseurl }}/figures/rl-kl.mov" autoplay loop muted playsinline></video>
 
 Both behaviors can be useful in different contexts. When entropy has collapsed, the model can reliably sample from a high-reward mode. When entropy is preserved, the model retains coverage over potentially higher-reward regions. This tradeoff becomes more nuanced when distributions are multimodal (multiple peaks), which is the setting we consider for the remainder of this post.
 
@@ -134,7 +134,7 @@ While this objective has proven widely successful, it relies on the policy $\piS
 
 For instance, consider the following setting.
 
-![Student-only policy failing example](/figures/rl-zero.png)
+![Student-only policy failing example]({{ site.baseurl }}/figures/rl-zero.png)
 
 
 Notice that $\piSphi$ does not have support over correct trajectories, so applying RL in this setting would lead to the model only ever learning what *not* to do, never what *to* do. Without any high-reward samples to reinforce, it cannot bootstrap itself toward $\piStar$. While an LM technically has full support over the token space, making it theoretically possible to eventually sample a correct trajectory, this is infeasible in practice.
@@ -146,7 +146,7 @@ These settings are common in practice. LMs often struggle with long-horizon agen
 
 Although typical RL fails in these settings, LMs provide a useful property that can alleviate this problem. Unlike other ML systems, LMs can be freely conditioned on additional information. Notably, even a small amount of *Privileged Information* (PI) can enable models to sample tasks they previously could not. The figure below shows $\piTthetafull$, the same model now conditioned on privileged information $\mathbf{I}$, which we refer to as the *teacher*. Although initially both are the same model, this is not the case as we train some of these components so we use different parameters to denote the teacher $\theta$ and the student $\phi$.  
 
-![With teacher example](/figures/teacher-self.png)
+![With teacher example]({{ site.baseurl }}/figures/teacher-self.png)
 
 
 After contextualizing on $\mathbf{I}$, we see that the model can now sample successful traces. The only problem now is that we won't have access to $\mathbf{I}$ at test time, since it is typically *task-specific*. So we need to find a way to transfer the information embedded within it to $\piSphi$, as this is the only policy we have access to at test time.
@@ -179,7 +179,7 @@ Typically $\piTtheta$ is a larger model, but in our setting it can be the same m
 
 While this approach is powerful, it is inherently limited by forward-KL being *mode covering*.
 
-<video src="/figures/sft.mov" autoplay loop muted playsinline></video>
+<video src="{{ site.baseurl }}/figures/sft.mov" autoplay loop muted playsinline></video>
 
 
 This can lead to the student outputting samples that are unlikely under the teacher, as forward-KL encourages $\piS$ to expand its support to cover all of $\piT$ rather than accurately approximating it.
@@ -194,7 +194,7 @@ $$
 
 Minimizing this encourages the student to place mass where it already samples, but guided by the teacher's density. We note that typically most works allow $\phi$ to equal $\theta$ as in [Penaloza et al. (2026)](#ref-penaloza2026), be an exponential moving average as in [Hübotter et al. (2026)](#ref-hubotter2026), [Shenfeld et al. (2026)](#ref-shenfeld2026), and [Zhao et al. (2026)](#ref-zhao2026), or simply be the base model. 
 
-<video src="/figures/rKL.mov" autoplay loop muted playsinline></video>
+<video src="{{ site.baseurl }}/figures/rKL.mov" autoplay loop muted playsinline></video>
 
 This idea comes from [Agarwal et al. (2023)](#ref-onpoldistill), which shows that distilling on-policy can lead to significantly better performance and generalization on a variety of tasks when compared to SFT.
 
@@ -238,7 +238,7 @@ $$
 
 </details>
 
-<video src="/figures/rklr.mov" autoplay loop muted playsinline></video>
+<video src="{{ site.baseurl }}/figures/rklr.mov" autoplay loop muted playsinline></video>
 
 
 Introducing this reward bias enables the student to fit higher-reward modes. Notice that this objective has the same form as the RL-as-inference objective, simply with the teacher as the prior instead of a fixed reference.
@@ -253,7 +253,7 @@ One assumption that self-distillation relies on is that the teacher model $\piT$
 
 
 
-![Teacher with limited coverage](/figures/bad-teacher.png)
+![Teacher with limited coverage]({{ site.baseurl }}/figures/bad-teacher.png)
 
 In this case, regardless of which algorithm we use, we are limited by the abilities of the teacher. To mitigate this, we can first train the teacher to approximate $\piStar$, putting us back in a setting where distillation via SFT is effective.
 
@@ -307,7 +307,7 @@ $$
 
 Using $J_{\text{Teacher}}$ we can make the teacher resemble $\piStar$, after which we can default back to distilling the knowledge via [SFT (forward-KL)](#supervised-fine-tuning).
 
-<video src="/figures/em3.mov" autoplay loop muted playsinline></video>
+<video src="{{ site.baseurl }}/figures/em3.mov" autoplay loop muted playsinline></video>
 
 Here KL-constrained RL first improves the teacher, allowing $\piTtheta$ to approximate $\piStar$ while collapsing onto a single mode since the KL constraint keeps it close to $\piSphi$. After improving $\piT$ sufficiently, we draw samples from it and optimize $J_{\text{SFT}}$ to improve $\piSphi$, the policy we use at deployment.
 
@@ -372,7 +372,7 @@ To visualize $\pi$-Distill, we add an axis representing the KL between each poli
 When $\alpha = 1$, only the teacher is being trained. This is similar to other work that explores conditional training with language models.
 
 
-<video src="/figures/teacher.mov" autoplay loop muted playsinline></video>
+<video src="{{ site.baseurl }}/figures/teacher.mov" autoplay loop muted playsinline></video>
 
 Here we see the teacher improving and getting closer to $\piStar$. Training only the teacher incentivizes it to drift from the base model, with the KL term $D_{\text{kl}}\big(\piTthetafull \;\|\; \text{sg}[\piSthetafull]\big)$ preventing it from straying too far from the student. We can also see that when $\piS$ and $\piT$ share parameters $\theta$, training the teacher alone still helps the student improve.
 
@@ -384,7 +384,7 @@ In Section 7 of [Penaloza et al. (2026)](#ref-penaloza2026), we show this genera
 
 This is the opposite of the previous case. Here we only train the student via off-policy RL with traces from the teacher $\piT$.
 
-<video src="/figures/student.mov" autoplay loop muted playsinline></video>
+<video src="{{ site.baseurl }}/figures/student.mov" autoplay loop muted playsinline></video>
 
 
 Training the student directly attracts it toward the teacher, and through shared parameters the teacher can also improve. Directly training on the teacher's distribution is a significantly stronger attractor for the student compared to relying on implicit knowledge transfer from teacher-only training.
@@ -398,7 +398,7 @@ As shown in Section 7 of [Penaloza et al. (2026)](#ref-penaloza2026), fitting te
 Here the teacher is explicitly tasked with improving while the student is simultaneously tasked with approximating it. This creates a self-regularizing dynamic where the student actively tracks the teacher, preventing it from drifting too far.
 
 
-<video src="/figures/joint.mov" autoplay loop muted playsinline></video>
+<video src="{{ site.baseurl }}/figures/joint.mov" autoplay loop muted playsinline></video>
 
 
 Notice how the teacher can still drift but not as far as before. With explicit student training, we approximate the teacher directly, keeping both policies closer together than in teacher-only training.
