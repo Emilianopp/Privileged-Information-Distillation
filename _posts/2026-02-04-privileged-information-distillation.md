@@ -23,8 +23,10 @@ citation: |
 ---
 
 <img src="{{ site.baseurl }}/figures/start.png" alt="Overview of self-distillation and privileged information distillation">
+## Overview
 
-This post provides an introductory overview of recent works on self-distillation and privileged information distillation, including [Shenfeld et al. (2026)](#ref-shenfeld2026), [Zhao et al. (2026)](#ref-zhao2026), [Hübotter et al. (2026)](#ref-hubotter2026), and [Penaloza et al. (2026)](#ref-penaloza2026). We aim to build intuition for how these algorithms work, where they come from, and when their assumptions hold. Throughout, we favour gaining intuition over providing a complete nuanced view, using simplified 2D/3D visualizations of these algorithms to describe the core ideas.
+This post covers recent works on self-distillation and privileged information distillation, including [Shenfeld et al. (2026)](#ref-shenfeld2026), [Zhao et al. (2026)](#ref-zhao2026), [Hübotter et al. (2026)](#ref-hubotter2026), [Ye et al. (2026)](#ref-ye2026), and [Penaloza et al. (2026)](#ref-penaloza2026). The core idea behind these works is how to fix situations where the model cannot sample successful outcomes, assuming one does not have *full* access to a larger model but does have access to additional *privileged information* that can be added in context. We do not discuss in-depth results or how to mine or obtain privileged information, but note that common sources of privileged information are successful agentic trajectories ([Penaloza et al., 2026](#ref-penaloza2026)), ground truth answers ([Zhao et al., 2026](#ref-zhao2026)), or self-reflection ([Hübotter et al., 2026](#ref-hubotter2026)). Rather, we aim to build intuition for how these algorithms work, where they come from, and when their assumptions hold. Throughout, we favour gaining intuition over providing a complete nuanced view, using simplified 2D/3D visualizations of these algorithms to describe the core ideas.
+
 
 
 We hope this blog is approachable to a broad audience assuming only a small background in reinforcement learning and its application to LMs. Regardless, we provide some supplemental reading for those interested. 
@@ -75,19 +77,22 @@ We hope this blog is approachable to a broad audience assuming only a small back
 
 ## Reinforcement Learning as Variational Inference
 
-The goal of RL is to maximize reward
+The goal of RL is to maximize reward:
 
 $$
 \piStar = \arg\max_\pi \mathbb{E}_{y \sim \pi(\cdot \mid x)}\left[R(y, x)\right]
 $$
 
-to obtain a target policy $\piStar$. A slightly different perspective treats RL as a *variational* inference problem where we define the target policy as a distribution over outputs
+to obtain a target policy $\piStar$. Throughout this post we consider continuous rewards $R(y, x) \in \mathbb{R}$, where higher is always preferred.
+
+
+A slightly different perspective treats RL as a *variational* inference problem where we define the target policy as a reward tilted distribution over outputs with prior $\pi_{\mathrm{ref}}$. In practice $\pi_{\mathrm{ref}}$ is typically the base model or an exponential moving average.
 
 $$
 \piStarfull = \frac{1}{Z(x)}\,\pi_{\mathrm{ref}}(y \mid x)\exp\left(\frac{R(y, x)}{\beta}\right)
 $$
 
-Since the partition function $Z$ makes direct inference intractable, we instead parameterize an approximate policy $\piSphi$ and minimize the reverse-KL divergence to $\piStar$. Where we use reverse-KL as we can only sample from $\piSphi$, not from $\piStar$
+Since the partition function $Z$ makes direct inference intractable, we instead parameterize an approximate policy $\piSphi$ and minimize the reverse-KL divergence to $\piStar$. We use reverse-KL because we can only sample from $\piSphi$, not from $\piStar$
 
 $$
 \underbrace{D_{\text{kl}}(\piSphi \;\|\; \piStar)}_{\text{Reverse-KL}} = \mathbb{E}_{y\sim\piSphi}\left[\log\frac{\piSphi(y \mid x)}{\piStarfull}\right]
@@ -153,30 +158,30 @@ For instance, consider the following setting:
 
 Notice that $\piSphi$ does not have support over correct trajectories, so applying RL in this setting would lead to the model only ever learning what *not* to do, never what *to* do. Without any high-reward samples to reinforce, it cannot bootstrap itself toward $\piStar$. While an LM technically has full support over the token space, making it theoretically possible to eventually sample a correct trajectory, this is infeasible in practice.
 
-These settings are common in practice. LMs often struggle to sample correct solutions to long-horizon agentic tasks and//or hard reasoning problems, thus alleviating this could help greatly improve performance.
+These settings are common in practice. LMs often struggle to sample correct solutions to long-horizon agentic tasks and/or hard reasoning problems, so alleviating this could greatly improve performance.
 
 
 ## Shaping a LM distribution by Conditioning
 
-Although typical RL fails in these settings, LMs provide a useful property that can alleviate this problem. Unlike other ML systems, LMs can be freely conditioned on additional information. Notably, even a small amount of *Privileged Information* (PI) can enable models to succeed at tasks they previously could not. The figure below shows $\piTthetafull$, the same model now conditioned on privileged information $\mathbf{I}$, which we refer to as the *teacher*. Although initially both are the same model, this is not the case as we train some of these components so we use different parameters to denote the teacher $\theta$ and the student $\phi$.  
+Although typical RL fails in these settings, LMs provide a useful property that can alleviate this problem. Unlike other ML systems, LMs can be freely conditioned on additional information. Notably, even a small amount of *privileged information* can enable models to succeed at tasks they previously could not. The figure below shows $\piTthetafull$, the same model now conditioned on privileged information $\mathbf{I}$, which we refer to as the *teacher*. Although initially both are the same model, this changes as we train them, so we use different parameters to denote the teacher $\theta$ and the student $\phi$.  
 
 ![With teacher example]({{ site.baseurl }}/figures/start-w-teacher.png)
 
 
 After contextualizing on $\mathbf{I}$, we see that the model can now sample successful traces. The only problem now is that we won't have access to $\mathbf{I}$ at test time, since it is typically *task-specific*. So we need to find a way to transfer the information embedded within it to $\piSphi$, as this is the only policy we have access to at test time.
 
-The remainder of this post explores different approaches to achieving this. Specifically in settings where we assume $\piS$ and $\piT$ are derived from the *same* base model.
+The remainder of this post explores different approaches to achieving this. Specifically, in settings where we assume $\piStheta$ and $\piTtheta$ are derived from the *same* base model.
 
 1. [SFT](#sft) — supervised fine-tuning on teacher trajectories
 2. [Self-Distillation](#self-distillation-via-reverse-kl) — matching the student to the teacher via reverse KL
 3. [Reward-Tilted Self-Distillation](#reward-tilted-self-distillation) —  reward tilted reverse KL
-4. [Fixing a Bad Teacher - Variational Expectation Maximization](#variational-em) — alternating between fitting the teacher and distilling to the student
+4. [Fixing a Bad Teacher - Variational Expectation-Maximization](#variational-em) — alternating between fitting the teacher and distilling to the student
 5. [$\pi$-Distill](#pi-distill) — joint teacher-student training with shared parameters
 
 
 ## Supervised Fine-Tuning 
 
-By far the simplest and most popular way of transferring this knowledge is through Supervised Fine-Tuning (SFT). This is equivalent to fitting forward-KL between the teacher policy $\piT$ and the student $\piS$. 
+By far the simplest and most popular way of transferring this knowledge is through Supervised Fine-Tuning (SFT). This is equivalent to fitting forward-KL between the teacher policy $\piTtheta$ and the student $\piStheta$.
 
 
 
@@ -196,7 +201,7 @@ While this approach is powerful, it is inherently limited by forward-KL being *m
 <video src="{{ site.baseurl }}/figures/sft.mov" autoplay loop muted playsinline></video>
 
 
-This can lead to the student outputting samples that are unlikely under the teacher, as forward-KL encourages $\piS$ to expand its support to cover all of $\piT$ rather than accurately approximating it.
+This can lead to the student outputting samples that are unlikely under the teacher, as forward-KL encourages $\piStheta$ to expand its support to cover all of $\piTtheta$ rather than accurately approximating it.
 
 ## Self-Distillation via Reverse KL
 
@@ -209,12 +214,12 @@ $$
 Optimizing this encourages the student to seek easy to fit modes of the teacher, which may not necessarily be optimal. This objective is the most widely used in recent works employed by [Shenfeld et al. (2026)](#ref-shenfeld2026), [Zhao et al. (2026)](#ref-zhao2026) and [Hübotter et al. (2026)](#ref-hubotter2026), which has been shown to be a potent alternative to traditional SFT. We note that typically most works allow $\phi$ to equal $\theta$ as in [Penaloza et al. (2026)](#ref-penaloza2026), be an exponential moving average as in [Hübotter et al. (2026)](#ref-hubotter2026), [Shenfeld et al. (2026)](#ref-shenfeld2026), and [Zhao et al. (2026)](#ref-zhao2026), or simply be the base model. 
 
 
-Effectively this objective acts similarly to the RL objective above:
+Effectively, this objective acts similarly to the RL objective above:
 <video src="{{ site.baseurl }}/figures/rKL.mov" autoplay loop muted playsinline></video>
 
 
 
-Here we see that the student can appropriatly fit the teacher's mode, but this can lead to some suboptimal behavior, where the policy fits a lower-reward mode of the teacher.
+Here we see that the student can appropriately fit the teacher's mode, but this can lead to some suboptimal behavior where the policy fits a lower-reward mode of the teacher.
 
 
 ## Reward-Tilted Self-Distillation
@@ -225,7 +230,7 @@ $$
 \piStarfulli \propto \piTthetafull\exp\left(\frac{R(y, x)}{\beta}\right).
 $$
 
-Assuming $\theta$ is fixed with respect to $\piT$, we can optimize the reverse-KL between the student and this tilted target. This yields the following objective
+Assuming $\theta$ is fixed with respect to $\piTtheta$, we can optimize the reverse-KL between the student and this tilted target. This yields the following objective
 
 $$
 \max_\phi \; \underbrace{\mathbb{E}_{y\sim\piSphifull}\left[R(y, x)\right]}_{\text{Find a high-reward region}} - \beta \, \underbrace{D_{\text{kl}}\big(\piSphifull \;\|\; \piTthetafull\big)}_{\text{Find a mode of the teacher}}
@@ -259,33 +264,33 @@ $$
 
 Introducing this reward bias enables the student to fit higher-reward modes. Notice that this objective has the same form as the RL-as-inference objective, simply with the teacher as the prior instead of a fixed reference.
 
-However, self-distillation in general, assumes that the teacher is a fair approximation of $\piStar$, which can be unrealistic in many settings. For example, in some cases $\piT$ may not know how to properly leverage a hint ($\mathbf{I}$) to obtain the right answer.
+However, self-distillation in general assumes that the teacher is a fair approximation of $\piStar$, which can be unrealistic in many settings. For instance, in some cases $\piTtheta$ may not know how to properly leverage $\mathbf{I}$ to obtain the right answer.
 
 
 
 
 ## Fixing a Bad Teacher - Variational Expectation-Maximization
-One assumption that self-distillation relies on is that the teacher model $\piT$ has support over high-reward regions, meaning $\piTtheta \approx \piStar$. While this is likely valid in many settings, it may not hold when even conditioning on $\mathbf{I}$ does not give the model sufficient coverage over high-reward regions. 
+One assumption that self-distillation relies on is that the teacher model $\piTtheta$ has support over high-reward regions, meaning $\piTtheta \approx \piStar$. While this is likely valid in many settings, it may not hold when even conditioning on $\mathbf{I}$ does not give the model sufficient coverage over high-reward regions. 
 
 
-For instance see the figure below: 
+For instance, see the figure below:
 ![Teacher with limited coverage]({{ site.baseurl }}/figures/bad-teacher.png)
 
-Here while $\piT$ does have some coverage over succesful outputs, most of it's mass lies in the low-reward region. In this case, regardless of which algorithm we use, we are limited by the abilities of the teacher.  To mitigate this, we can first train the teacher to approximate $\piStar$, putting us back in a setting where distillation is effective. 
+Here while $\piTtheta$ does have some coverage over successful outputs, most of its mass lies in the low-reward region. In this case, regardless of which algorithm we use, we are limited by the abilities of the teacher.  To mitigate this, we can first train the teacher to approximate $\piStar$, putting us back in a setting where distillation is effective. 
 
 We can train the teacher via the same reward-tilted reverse-KL objective from before, but now defining the target as a reward-tilted variant of the student
 
 $$
-\piStarfull \propto \piSthetafull \exp\left(\frac{R(y, x)}{\beta}\right)
+\piStarfull \propto \piSphifull \exp\left(\frac{R(y, x)}{\beta}\right)
 $$
 
 Minimizing the reverse-KL between the teacher and $\piStar$ yields
 
 $$
-J_{\text{Teacher}}(\theta) = \underbrace{\mathbb{E}_{y \sim \piTthetafull}\left[R(y, x)\right] }_{\text{Make teacher better}}- \beta \underbrace{\, D_{\text{kl}}\big(\piTthetafull \;\|\; \text{sg}[\piSthetafull]\big)}_{\text{Make learning from teacher easier}}
+J_{\text{Teacher}}(\theta) = \underbrace{\mathbb{E}_{y \sim \piTthetafull}\left[R(y, x)\right] }_{\text{Make teacher better}}- \beta \underbrace{\, D_{\text{kl}}\big(\piTthetafull \;\|\; \text{sg}[\piSphifull]\big)}_{\text{Make learning from teacher easier}}
 $$
 
-Here $\text{sg}[\cdot]$ denotes stop-gradient, meaning the student is held fixed when updating the teacher. This encourages the teacher to maximize reward while not drifting too far from the student. Effectively, one part of the objetive aims to improve the teacher, while the other aims at making the samples from the teacher look more similar to those of the student. Making the teacher act like the student may seem counter-intuitive, but the KL term keeps the teacher's samples close to the student's distribution, meaning they stay more *on-policy* ([Sutton & Barto, 2018](#ref-sutton2018)). This makes the teacher an easier target for the student to distill from later. 
+Here $\text{sg}[\cdot]$ denotes stop-gradient, meaning the student is held fixed when updating the teacher. This encourages the teacher to maximize reward while not drifting too far from the student. Effectively, one part of the objective aims to improve the teacher while the other aims to make the samples from the teacher look more similar to those of the student. Making the teacher act like the student may seem counter-intuitive, but the KL term keeps the teacher's samples close to the student's distribution, meaning they stay more *on-policy* ([Sutton & Barto, 2018](#ref-sutton2018)). This makes the teacher an easier target for the student to distill from later.
 
 <details>
 <summary><strong>Derivation of Teacher Objective</strong> (click to expand)</summary>
@@ -293,7 +298,7 @@ Here $\text{sg}[\cdot]$ denotes stop-gradient, meaning the student is held fixed
 <p>We define the target distribution as a reward-tilted variant of the student:</p>
 
 $$
-\piStarfull \propto \piSthetafull \exp\left(\frac{R(y, x)}{\beta}\right)
+\piStarfull \propto \piSphifull \exp\left(\frac{R(y, x)}{\beta}\right)
 $$
 
 <p>Minimizing the reverse-KL between the teacher and this target</p>
@@ -302,19 +307,19 @@ $$
 \begin{aligned}
 D_{\text{kl}}(\piTtheta \;\|\; \piStar)
 &= \mathbb{E}_{y \sim \piTthetafull}\left[\log \frac{\piTthetafull}{\piStarfull}\right] \\
-&= \mathbb{E}_{y \sim \piTthetafull}\left[\log \frac{\piTthetafull}{\frac{1}{Z(x)}\piSthetafull \exp\!\left(\frac{R(y,x)}{\beta}\right)}\right] \\
-&= \mathbb{E}_{y \sim \piTthetafull}\left[\log \piTthetafull - \log \piSthetafull - \frac{R(y,x)}{\beta} + \log Z(x)\right] \\
-&= D_{\text{kl}}\big(\piTthetafull \;\|\; \piSthetafull\big) - \frac{1}{\beta}\mathbb{E}_{y \sim \piTthetafull}\left[R(y, x)\right] + \log Z(x)
+&= \mathbb{E}_{y \sim \piTthetafull}\left[\log \frac{\piTthetafull}{\frac{1}{Z(x)}\piSphifull \exp\!\left(\frac{R(y,x)}{\beta}\right)}\right] \\
+&= \mathbb{E}_{y \sim \piTthetafull}\left[\log \piTthetafull - \log \piSphifull - \frac{R(y,x)}{\beta} + \log Z(x)\right] \\
+&= D_{\text{kl}}\big(\piTthetafull \;\|\; \piSphifull\big) - \frac{1}{\beta}\mathbb{E}_{y \sim \piTthetafull}\left[R(y, x)\right] + \log Z(x)
 \end{aligned}
 $$
 
 <p>Since $\log Z(x)$ is constant w.r.t. $\piTtheta$, minimizing is equivalent to maximizing</p>
 
 $$
-J_{\text{Teacher}}(\theta) = \mathbb{E}_{y \sim \piTthetafull}\left[R(y, x)\right] - \beta \, D_{\text{kl}}\big(\piTthetafull \;\|\; \piSthetafull\big)
+J_{\text{Teacher}}(\theta) = \mathbb{E}_{y \sim \piTthetafull}\left[R(y, x)\right] - \beta \, D_{\text{kl}}\big(\piTthetafull \;\|\; \piSphifull\big)
 $$
 
-<p>Adding $\text{sg}[\cdot]$ around $\piSthetafull$ prevents the student from being updated through the teacher loss.</p>
+<p>Adding $\text{sg}[\cdot]$ around $\piSphifull$ prevents the student from being updated through the teacher loss.</p>
 
 </details>
 
@@ -325,12 +330,12 @@ Using $J_{\text{Teacher}}$ we can make the teacher resemble $\piStar$, after whi
 
 <video src="{{ site.baseurl }}/figures/em3.mov" autoplay loop muted playsinline></video>
 
-Here KL-constrained RL first improves the teacher, allowing $\piTtheta$ to approximate $\piStar$ while collapsing onto a single mode since the KL constraint keeps it close to $\piSphi$. After improving $\piT$ sufficiently, we can then use any distillation objetive to fit $\piS$ onto $\piT$. The fastest and most common is to use $J_{\text{SFT}}$ by drawing samples from the improved teacher $\piT$ and use them to train $\piSphi$. 
+Here KL-constrained RL first improves the teacher, allowing $\piTtheta$ to approximate $\piStar$ while collapsing onto a single mode since the KL constraint keeps it close to $\piSphi$. After improving $\piTtheta$ sufficiently, we can then use any distillation objective to fit $\piSphi$ onto $\piTtheta$. The fastest and most common is to use $J_{\text{SFT}}$ by drawing samples from the improved teacher $\piTtheta$ and using them to train $\piSphi$.
 
 This approach can be viewed as variational expectation maximization, which is one of the most popular algorithms across machine learning and statistics ([Dempster et al., 1977](#ref-dempster1977), [Neal & Hinton, 1998](#ref-neal1998), [Bishop, 2006](#ref-bishop2006)). Further, this algorithm is the one primarily used in [Zhou et al. (2025)](#ref-zhou2025). While it can improve over the base policy, in [Penaloza et al. (2026)](#ref-penaloza2026) we show that it is inefficient and in many cases simply training the teacher suffices. Thus, one can greatly simplify the process by simultaneously training the teacher and student.
 
 
-For interested readers, we provide a more formal framing of how the described procedure can be seen as variational EM: 
+For interested readers, we provide a more formal framing of how the described procedure can be seen as variational EM:
 <details>
 <summary><strong>Learning to Reason as Variational EM</strong> (click to expand)</summary>
 
@@ -365,7 +370,7 @@ $$
 
 ## $\pi$-Distill
 
-While variational EM fits the teacher and student sequentially with different parameters for $\piS$ and $\piT$, in [Penaloza et al. (2026)](#ref-penaloza2026) we show this is inefficient and less effective. Rather, a simple solution is to allow $\piS$ and $\piT$ to share parameters and jointly train the model, greatly simplifying the training process.
+While variational EM fits the teacher and student sequentially with different parameters for $\piStheta$ and $\piTtheta$, in [Penaloza et al. (2026)](#ref-penaloza2026) we show this is inefficient and less effective. Rather, a simple solution is to allow $\piStheta$ and $\piTtheta$ to share parameters and jointly train the model, greatly simplifying the training process.
 
 The teacher objective is the same as in Variational EM
 
@@ -411,7 +416,7 @@ $$
 A key component of $\pi$-Distill is its ability to modulate between the student and teacher objectives using $\alpha$. This allows for varying training configurations depending on the properties of the teacher.
 
 - When $\alpha = 1$, optimization focuses entirely on the teacher, although the student may still improve through shared parameters.
-- When $\alpha = 0$, training focuses on the student learning from the teacher's current behavior. Interestingly, we observe that under certain conditions, parameter sharing can still lead to improvements in the teacher without explicit teacher updates.
+- When $\alpha = 0$, training focuses on the student learning from the teacher's current behavior. Interestingly, under certain conditions, parameter sharing can still lead to improvements in the teacher without explicit teacher updates.
 - When $\alpha = 0.5$, both are optimized jointly. Shared parameters allow representations learned for using $\mathbf{I}$ to transfer to the student, while student updates keep those representations effective without $\mathbf{I}$.
 
 
@@ -424,7 +429,7 @@ When $\alpha = 1$, only the teacher is being trained. This is similar to other w
 
 <video src="{{ site.baseurl }}/figures/teacher.mov" autoplay loop muted playsinline></video>
 
-Here we see the teacher improving and getting closer to $\piStar$. Training only the teacher incentivizes it to drift from the base model, with the KL term $D_{\text{kl}}\big(\piTthetafull \;\|\; \text{sg}[\piSthetafull]\big)$ preventing it from straying too far from the student. We can also see that when $\piS$ and $\piT$ share parameters $\theta$, training the teacher alone still helps the student improve.
+Here we see the teacher improving and getting closer to $\piStar$. Training only the teacher incentivizes it to drift from the base model, with the KL term $D_{\text{kl}}\big(\piTthetafull \;\|\; \text{sg}[\piSthetafull]\big)$ preventing it from straying too far from the student. We can also see that when $\piStheta$ and $\piTtheta$ share parameters $\theta$, training the teacher alone still helps the student improve.
 
 In Section 7 of [Penaloza et al. (2026)](#ref-penaloza2026), we show this generally works well, but one must be careful not to let the teacher collapse onto the student.
 
@@ -432,7 +437,7 @@ In Section 7 of [Penaloza et al. (2026)](#ref-penaloza2026), we show this genera
 
 ### Student Training $\alpha = 0$
 
-This is the opposite of the previous case. Here we only train the student via off-policy RL with traces from the teacher $\piT$.
+This is the opposite of the previous case. Here we only train the student via off-policy RL with traces from the teacher $\piTtheta$.
 
 <video src="{{ site.baseurl }}/figures/student.mov" autoplay loop muted playsinline></video>
 
@@ -461,11 +466,11 @@ In Section 7 of [Penaloza et al. (2026)](#ref-penaloza2026), we show this config
 
 We hope this post serves as a useful starting point for building intuition about the different approaches to training with privileged information.
 
-Many directions remain unexplored. For instance, $\pi$-Distill fits the student using off-policy traces from the teacher. In [Penaloza et al. (2026)](#ref-penaloza2026) we show the success of this depends heavily on the properties of the PI, e.g., the utility or KL between student and teacher. Another approach is to do teacher training followed by self-distillation, which would be fully on-policy. This could lead to superior performance as reverse-KL is generally easier to fit, at the cost of a two-step procedure. Alternatively, one could jointly train them like in $\pi$-Distill, but this would require sampling from both the teacher and student simultaneously (since both are trained on-policy).
+Many directions remain unexplored. For instance, $\pi$-Distill fits the student using off-policy traces from the teacher. In [Penaloza et al. (2026)](#ref-penaloza2026) we show the success of this depends heavily on the properties of the privielged information, e.g., the utility or KL between student and teacher. Another approach is to do teacher training followed by self-distillation, which would be fully on-policy. This could lead to superior performance as reverse-KL is generally easier to fit, at the cost of a two-step procedure. Alternatively, one could jointly train them like in $\pi$-Distill, but this would require sampling from both the teacher and student simultaneously (since both are trained on-policy).
 
-More effective types of PI mining are also a promising direction. [Liao et al. (2026)](#ref-liao2026) is a good example of this, where conditioning on self-reflection allows agents to improve. Our work in [Penaloza et al. (2026)](#ref-penaloza2026) suggests that for self-distillation, what matters most is the informativeness of the PI. If the teacher is too close to the student in terms of KL, they can collapse onto each other, making optimization harder. Mining helpful PI with sufficient but not excessive KL is a promising avenue.
+More effective types of privielged information mining are also a promising direction. [Liao et al. (2026)](#ref-liao2026) is a good example of this, where conditioning on self-reflection allows agents to improve. Our work in [Penaloza et al. (2026)](#ref-penaloza2026) suggests that for self-distillation, what matters most is the informativeness of the privielged information. If the teacher is too close to the student in terms of KL, they can collapse onto each other, making optimization harder. Mining helpful privielged information with sufficient but not excessive KL is a promising avenue.
 
-Finally, recent work suggests that fitting policies to more off-policy data induces more forgetting. One can think of ways to slowly generate PI for questions that help the student improve without incentivizing the policy to substantially drift from itself. The work by [Shenfeld et al. (2026)](#ref-shenfeld2026) is a good example of this. Extending to different settings like harder agentic tasks where context can grow exponentially, or personalization, could yield interesting results.
+Finally, recent work suggests that fitting policies to more off-policy data induces more forgetting. One can think of ways to slowly generate privielged information for questions that help the student improve without incentivizing the policy to substantially drift from itself. The work by [Shenfeld et al. (2026)](#ref-shenfeld2026) is a good example of this. Extending to different settings like harder agentic tasks where context can grow exponentially, or personalization, could yield interesting results.
 
 
 
@@ -532,3 +537,6 @@ Finally, recent work suggests that fitting policies to more off-policy data indu
 
 <a id="ref-hu2024"></a>
 **[Hu et al., 2024]** Hu, E. J., Jain, M., Elmoznino, E., Kaddar, Y., Lajoie, G., Bengio, Y., & Malkin, N. (2024). *Amortizing Intractable Inference in Large Language Models*. [arXiv:2310.04363](https://arxiv.org/abs/2310.04363)
+
+<a id="ref-ye2026"></a>
+**[Ye et al., 2026]** Ye, T., Dong, L., Wu, X., Huang, S., & Wei, F. (2026). *On-Policy Context Distillation for Language Models*. [arXiv:2602.12275](https://arxiv.org/abs/2602.12275)
