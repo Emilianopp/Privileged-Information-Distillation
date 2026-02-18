@@ -12,12 +12,6 @@ layout: default
       {% endfor %}
     </p>
     {% endif %}
-    {% if page.citation %}
-    <details class="cite-box">
-      <summary><strong>Cite this work</strong> (click to expand)</summary>
-      <pre><code>{{ page.citation }}</code></pre>
-    </details>
-    {% endif %}
   </header>
 
   <div class="post-content">
@@ -85,7 +79,7 @@ layout: default
 .post-content img,
 .post-content video {
   width: 100%;
-  max-width: 700px;
+  max-width: 75%;
   display: block;
   margin: 2rem auto;
   outline: none;
