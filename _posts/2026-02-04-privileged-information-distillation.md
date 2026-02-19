@@ -69,7 +69,12 @@ We hope this blog is approachable to a broad audience assuming only a small back
 
 </details>
 
+<details>
+<summary><strong>A Note on Visualizations</strong> (click to expand)</summary>
 
+<p>Throughout this post, we visualize policy distributions in a simplified reward space for clarity. In practice, policies are distributions over full token sequences, and the KL divergences in the objectives above operate over this high-dimensional space. Two policies can have identical reward distributions while differing substantially in trajectory space. These plots are intended to convey qualitative intuitions about optimization dynamics, such as mode-seeking vs. mode-covering behavior, coverage over high-reward regions, and drift from the reference, which hold in the full space even if the geometry there is far more complex.</p>
+
+</details>
 
 <details class="cite-box">
 <summary><strong>Cite this work</strong> (click to expand)</summary>
@@ -230,7 +235,7 @@ Here we see that the student can appropriately fit the teacher's mode, but this 
 
 ## Reward-Tilted Self-Distillation
 
-The main problem with pure self-distillation is its bias towards easier-to-fit modes, which may inherently be suboptimal. This comes from $\piTthetafull$ being the target distribution. A simple way to alleviate this is to define our target distribution $\piStar$ as a reward-tilted variant of $\piTthetafull$, which we use in [Penaloza et al. (2026)](#ref-penaloza2026):
+The main problem with pure self-distillation is its bias towards easier-to-fit modes, which may inherently be suboptimal. This comes from $\piTthetafull$ being the target distribution. A simple way to alleviate this is to define our target distribution $\piStar$ as a reward-tilted variant of $\piTthetafull$, which we use in [Penaloza et al. (2026)](#ref-penaloza2026) and is partly used in [Shenfeld et al. (2026)](#ref-shenfeld2026):
 
 $$
 \piStarfulli \propto \piTthetafull\exp\left(\frac{R(y, x)}{\beta}\right).
