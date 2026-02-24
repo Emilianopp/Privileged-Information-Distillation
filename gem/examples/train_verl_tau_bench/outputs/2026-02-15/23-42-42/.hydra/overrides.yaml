@@ -1,0 +1,4 @@
+- trainer.n_gpus_per_node=2
+- actor_rollout_ref.env.user_vllm_gpu=0
+- actor_rollout_ref.env.user_vllm_port=8100
+- actor_rollout_ref.env.user_vllm_gpu_mem_util=0.45

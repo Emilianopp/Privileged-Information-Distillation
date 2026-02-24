@@ -1,0 +1,3 @@
+- trainer.n_gpus_per_node=2
+- actor_rollout_ref.model.path=/mnt/adea/data_rw/finetuning/base/models--Qwen--Qwen3-4B
+- trainer.total_training_steps=2

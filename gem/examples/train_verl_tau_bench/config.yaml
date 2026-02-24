@@ -1,0 +1,76 @@
+hydra:
+  searchpath:
+    - pkg://verl.trainer.config
+
+defaults:
+  - ppo_trainer
+  - _self_
+
+actor_rollout_ref:
+  env:
+    env_name: retail
+    task_split: train
+    num_env: 128
+    user_model: "/mnt/adea/data_rw/finetuning/base/models--Qwen--Qwen3-14B"
+    user_provider: hosted_vllm
+    user_strategy: llm
+    model_name: qwen  # selects ReAct prompt variant
+    use_reasoning: True
+    use_only_hints: True
+    use_human_privileged: False
+    privileged_trajectories_path: /home/toolkit/emi_home/Privileged-Information-Distillation/files/privileged_actions.json
+    use_self_generated_hints: False
+    self_generated_hints_path: null
+    max_history_length: null
+    user_vllm_gpu: 2              # dedicated GPU for user model server
+    user_vllm_port: 8100          # Port for user model server
+    user_vllm_gpu_mem_util: 0.9   # high utilization — dedicated GPU, no sharing
+    user_vllm_max_model_len: 25000
+    user_temperature: 0.7
+    rollout_batch_size: 128  # num episodes per rollout batch
+    n_repeat: 4              # GRPO: collect n rollouts, normalize advantages across them
+    debug: False              # debug mode: 2 train tasks, 2 eval tasks
+    trace_dir: outputs/traces  # save generated trajectories here
+  keep_generation_failed: True
+  dump_experience_every: -1
+  prompt_template: na
+  apply_chat_template: True
+  gamma: 1.0
+  norm_return: True
+  rollout:
+    name: vllm
+    response_length: 2058
+    temperature: 0.7
+    max_model_len: 25000
+    enable_chunked_prefill: False
+    enforce_eager: False
+    gpu_memory_utilization: 0.5
+    log_prob_micro_batch_size_per_gpu: 4
+  actor:
+    strategy: fsdp
+    fsdp_config:
+      param_offload: True
+    optim:
+      lr: 1e-6
+    loss_agg_mode: seq-mean-token-sum-norm
+    ppo_epochs: 2
+    ppo_micro_batch_size_per_gpu: 2
+
+algorithm:
+  adv_estimator: grpo
+
+trainer:
+  project_name: verl-tau-bench
+  experiment_name: tau-bench
+  resume_mode: disable
+  logger:
+    - console
+    - wandb
+  save_freq: 999999
+  test_freq: 999999
+  eval_freq: 1           # evaluate on test split every N steps
+  total_training_steps: 1000
+  profile_steps: null
+
+ray_init:
+  num_cpus: 64

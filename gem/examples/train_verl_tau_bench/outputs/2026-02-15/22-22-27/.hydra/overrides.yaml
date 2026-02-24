@@ -1,0 +1,10 @@
+- actor_rollout_ref.env.user_model=Qwen/Qwen3-14B
+- actor_rollout_ref.env.user_provider=hosted_vllm
+- trainer.n_gpus_per_node=1
+- actor_rollout_ref.model.path=Qwen/Qwen3-4B
+- actor_rollout_ref.env.use_only_hints=True
+- actor_rollout_ref.env.privileged_trajectories_path=/home/toolkit/emi_home/Privileged-Information-Distillation/files/privileged_actions.json
+- actor_rollout_ref.env.num_env=2
+- actor_rollout_ref.rollout.rollout_batch_size=32
+- actor_rollout_ref.rollout.gpu_memory_utilization=0.7
+- trainer.total_training_steps=50

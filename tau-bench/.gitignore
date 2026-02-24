@@ -1,0 +1,10 @@
+#Run result artifacts
+results/**
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.egg-info/
+.git_broken/
+test.ipynb
+tau_bench/agents/test_agent.ipynb
