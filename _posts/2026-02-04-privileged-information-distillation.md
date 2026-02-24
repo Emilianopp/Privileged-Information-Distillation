@@ -177,7 +177,7 @@ Although typical RL fails in these settings, LMs provide a useful property that 
 
 After contextualizing on $\mathbf{I}$, we see that the model can now sample successful traces. The only problem now is that we won't have access to $\mathbf{I}$ at test time, since it is typically *task-specific*. So we need to find a way to transfer the information embedded within it to $\piSphi$, as this is the only deployable policy.
 
-In the above example and for the remainder of the post, we assume that both $\piSphi$ and $\piTtheta$ share input prompts $x$ and outputs $y$ with the only difference between them being that $\piSphi$ is additionally contextualized with $\mathbf{I}$. We further clarify that this is the case regardless of which policy is used for sampling. Allowing for this to happen in practice is fairly straight-forward, with the below diagram visualizing the how this is done:
+In the above example and for the remainder of the post, we assume that both $\piSphi$ and $\piTtheta$ share input prompts $x$ and outputs $y$ with the only difference between them being that $\piTtheta$ is additionally contextualized with $\mathbf{I}$. We further clarify that this is the case regardless of which policy is used for sampling. Allowing for this to happen in practice is fairly straight-forward, with the below diagram visualizing the how this is done:
 
 ![Data illustration]({{ site.baseurl }}/figures/data-illustration.png)
 
